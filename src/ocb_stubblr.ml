@@ -16,6 +16,9 @@ let error_exit_msgf fmt =
   let k str = Format.printf "%s\n%!" str; exit 1 in
   Format.ksprintf k ("Ocb_stubblr: " ^^ fmt)
 
+let warn_msgf fmt =
+  Format.printf ("Ocb_stubblr: " ^^ fmt)
+
 let chomp s =
   let drop ~rev s = String.drop ~rev ~sat:Char.Ascii.is_white s in
   drop ~rev:false (drop ~rev:true s)
@@ -33,16 +36,17 @@ module Pkg_config = struct
 
   let opam_prefix =
     let cmd = "opam config var prefix" in
-    lazy ( try run_and_read cmd with Failure _ ->
-            error_msgf "error running opam")
+    lazy ( try Some (run_and_read cmd) with Failure _ ->
+            warn_msgf "error running opam"; None)
 
   let var = "PKG_CONFIG_PATH"
 
   let path () =
-    let opam = Lazy.force opam_prefix
+    let opam_paths = match Lazy.force opam_prefix with
+      | Some opam -> [opam/"lib"/"pkgconfig"; opam/"share"/"pkgconfig"]
+      | None -> []
     and rest = try [Sys.getenv var] with Not_found -> [] in
-    opam/"lib"/"pkgconfig" :: opam/"share"/"pkgconfig" :: rest
-      |> String.concat ~sep:":"
+    opam_paths @ rest |> String.concat ~sep:":"
 
   let run ~flags package =
     let cmd = strf "%s=%s pkg-config %s %s 2>/dev/null"
